@@ -1,7 +1,7 @@
 import rospy
 from std_msgs.msg import Float64
-from Autonomy.msg import Sign, Radar
-
+from Autonomy.msg import Sign
+from radar_omnipresense.msg import radar_data
 
 class SpeedController:
     def __init__(self, sys_max_speed=10, safety_c1=3, safety_c2=0.1, safety_c3=0.01):
@@ -20,7 +20,7 @@ class SpeedController:
 
         rospy.init_node('calc_target_speed', anonymous=True)
 
-        rospy.Subscriber("radar", Radar, self.set_object_data)
+        rospy.Subscriber("radar", radar_data, self.set_object_data)
         rospy.Subscriber("speed", Float64, self.set_speed_data)
         rospy.Subscriber("sign", Sign, self.set_sign_data)
 
@@ -40,8 +40,8 @@ class SpeedController:
 
     def calc_speed(self, own_vel, object_vel, object_dist):
 
-        # If we don't have data yet, don't move
-        if not own_vel or not object_vel or not object_dist:
+        # If we don't have all data yet, don't move
+        if None in [own_vel, object_vel, object_dist]:
             return 0
 
         safety_dist = self.safety_c1 + (self.safety_c2 * own_vel) + (self.safety_c3 * own_vel ** 2)
@@ -66,8 +66,8 @@ class SpeedController:
         return target_speed
 
     def set_object_data(self, message):
-        self.object_vel = message.vel
-        self.object_dist = message.dist
+        self.object_dist = message.range
+        self.object_vel = message.speed
 
     def set_speed_data(self, message):
         self.own_vel = message
