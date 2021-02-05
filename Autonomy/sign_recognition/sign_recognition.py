@@ -25,29 +25,39 @@ class SignRecognition:
         self.device = 'cpu'
         self.classes = load_classes(self.opt.class_path)
         self.network = self.load_network()
+        self.image = None
 
         # Initialize ROS things
         self.pub = rospy.Publisher('sign', Sign, queue_size=1)
-        self.sub = rospy.Subscriber("/zed/zed_node/right_raw/image_raw_color", Image, self.detect)
+        self.sub = rospy.Subscriber("/zed/zed_node/right_raw/image_raw_color", Image, self.set_img)
         self.bridge = CvBridge()
 
-    def detect(self, incoming_msg):
+    def __call__(self, rate=10):
+        r = rospy.Rate(rate)
+
+        while not rospy.is_shutdown():
+            msg = self.detect()
+            self.pub.publish(msg)
+            r.sleep()
+
+    def set_img(self, msg):
+        # read into OpenCV 2
+        try:
+            self.image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+        except CvBridgeError as e:
+            print(e)
+
+    def detect(self):
         msg = Sign()
         (
             msg.stop,
             msg.stop_distance,
             msg.speed_limit,
             msg.speed_limit_value,
-        ) = self.process(incoming_msg)
+        ) = self.process(self.image)
+        return msg
 
-        self.pub.publish(msg)
-
-    def process(self, msg):
-        # read into OpenCV 2
-        try:
-          image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-        except CvBridgeError as e:
-          print(e)
+    def process(self, image):
         # read into PIL from OpenCV 2
         img = transforms.ToTensor()(Image.fromarray(image))
         # Pad to square resolution
@@ -55,7 +65,7 @@ class SignRecognition:
         # Resize
         img = resize(img, self.opt.img_size)
         # Transform into tensor
-        input_img = Variable(image.type(torch.FloatTensor))
+        input_img = Variable(img.type(torch.FloatTensor))
         # detect things
         with torch.no_grad():
             detections = self.network(input_img)
@@ -106,13 +116,11 @@ if __name__ == "__main__":
     parser.add_argument("--image_folder", type=str, default="data/samples", help="path to dataset")
     parser.add_argument("--model_def", type=str, default="yolov3-LISA.cfg", help="path to model definition file")
     parser.add_argument("--weights_path", type=str, default="yolov3.weights", help="path to weights file")
-    parser.add_argument("--class_path", type=str, default="data/coco.names", help="path to class label file")
+    parser.add_argument("--class_path", type=str, default="classes.names", help="path to class label file")
     parser.add_argument("--conf_thres", type=float, default=0.8, help="object confidence threshold")
     parser.add_argument("--nms_thres", type=float, default=0.4, help="iou threshold for non-maximum suppression")
     parser.add_argument("--batch_size", type=int, default=1, help="size of the batches")
     parser.add_argument("--n_cpu", type=int, default=0, help="number of cpu threads to use during batch generation")
     parser.add_argument("--img_size", type=int, default=416, help="size of each image dimension")
-    parser.add_argument("--checkpoint_model", type=str, help="path to checkpoint model")
     options = parser.parse_args()
     sign = SignRecognition(options)
-
