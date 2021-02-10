@@ -13,7 +13,7 @@ from PIL import Image
 
 from Autonomy.sign_recognition.utils import load_classes, non_max_suppression, pad_to_square, resize
 from Autonomy.sign_recognition.models import Darknet
-from Autonomy.msg import Sign
+from Autonomy.sign_recognition import Sign
 
 
 class SignRecognition:
