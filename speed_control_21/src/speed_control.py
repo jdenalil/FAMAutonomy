@@ -1,6 +1,6 @@
 import rospy
 from std_msgs.msg import Float64
-from Autonomy.msg import Sign
+from sign_recognition_21.msg import Sign
 from radar_omnipresense.msg import radar_data
 
 class SpeedController:

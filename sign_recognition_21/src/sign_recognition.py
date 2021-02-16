@@ -8,12 +8,12 @@ import torch
 import argparse
 from torch.autograd import Variable
 from cv_bridge import CvBridge, CvBridgeError
+from sensor_msgs.msg import Image
 import torchvision.transforms as transforms
-from PIL import Image
+import PIL
 
-from Autonomy.sign_recognition.utils import load_classes, non_max_suppression, pad_to_square, resize
-from Autonomy.sign_recognition.models import Darknet
-from Autonomy.sign_recognition import Sign
+from utils import load_classes, non_max_suppression, pad_to_square, resize, Darknet
+from sign_recognition_21.msg import Sign
 
 
 class SignRecognition:
@@ -28,6 +28,7 @@ class SignRecognition:
         self.image = None
 
         # Initialize ROS things
+        rospy.init_node('sign_detection', anonymous=True)
         self.pub = rospy.Publisher('sign', Sign, queue_size=1)
         self.sub = rospy.Subscriber("/zed/zed_node/right_raw/image_raw_color", Image, self.set_img)
         self.bridge = CvBridge()
@@ -58,8 +59,10 @@ class SignRecognition:
         return msg
 
     def process(self, image):
+        if image == None:
+            return(False, 0, False, 0)
         # read into PIL from OpenCV 2
-        img = transforms.ToTensor()(Image.fromarray(image))
+        img = transforms.ToTensor()(PIL.Image.fromarray(image))
         # Pad to square resolution
         img, _ = pad_to_square(img, 0)
         # Resize
@@ -115,7 +118,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--image_folder", type=str, default="data/samples", help="path to dataset")
     parser.add_argument("--model_def", type=str, default="yolov3-LISA.cfg", help="path to model definition file")
-    parser.add_argument("--weights_path", type=str, default="yolov3.weights", help="path to weights file")
+    parser.add_argument("--weights_path", type=str, default="yolov3_LISA.pth", help="path to weights file")
     parser.add_argument("--class_path", type=str, default="classes.names", help="path to class label file")
     parser.add_argument("--conf_thres", type=float, default=0.8, help="object confidence threshold")
     parser.add_argument("--nms_thres", type=float, default=0.4, help="iou threshold for non-maximum suppression")
@@ -124,3 +127,4 @@ if __name__ == "__main__":
     parser.add_argument("--img_size", type=int, default=416, help="size of each image dimension")
     options = parser.parse_args()
     sign = SignRecognition(options)
+    sign()
