@@ -20,7 +20,7 @@ class SpeedController:
 
         rospy.init_node('calc_target_speed', anonymous=True)
 
-        rospy.Subscriber("radar", radar_data, self.set_object_data)
+        rospy.Subscriber("radar_report", radar_data, self.set_object_data)
         rospy.Subscriber("speed", Float64, self.set_speed_data)
         rospy.Subscriber("sign", Sign, self.set_sign_data)
 
@@ -66,6 +66,7 @@ class SpeedController:
         return target_speed
 
     def set_object_data(self, message):
+        print("setting object data", message.range)
         self.object_dist = message.range
         self.object_vel = message.speed
 
@@ -73,6 +74,7 @@ class SpeedController:
         self.own_vel = message
 
     def set_sign_data(self, message):
+        print("setting sign data")
         self.stop = message.stop
         self.stop_distance = message.stop_distance
         self.speed_limit = message.speed_limit

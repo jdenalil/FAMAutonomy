@@ -26,12 +26,15 @@ class SignRecognition:
         self.classes = load_classes(self.opt.class_path)
         self.network = self.load_network()
         self.image = None
+        self.depth_image = None
 
         # Initialize ROS things
         rospy.init_node('sign_detection', anonymous=True)
         self.pub = rospy.Publisher('sign', Sign, queue_size=1)
-        self.sub = rospy.Subscriber("/zed/zed_node/right_raw/image_raw_color", Image, self.set_img)
+        self.sub_raw = rospy.Subscriber("/zed/zed_node/left_raw/image_raw_color", Image, self.set_img)
+        self.sub_depth = rospy.Subscriber("/zed/zed_node/depth/depth_registered", Image, self.set_depth_img)
         self.bridge = CvBridge()
+        print("setup complete")
 
     def __call__(self, rate=10):
         r = rospy.Rate(rate)
@@ -47,6 +50,13 @@ class SignRecognition:
             self.image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
         except CvBridgeError as e:
             print(e)
+    
+    def set_depth_img(self, msg):
+        # read into OpenCV 2
+        try:
+            self.depth_image = self.bridge.imgmsg_to_cv2(msg, "32FC1")
+        except CvBridgeError as e:
+            print(e)
 
     def detect(self):
         msg = Sign()
@@ -59,7 +69,7 @@ class SignRecognition:
         return msg
 
     def process(self, image):
-        if image == None:
+        if image is None:
             return(False, 0, False, 0)
         # read into PIL from OpenCV 2
         img = transforms.ToTensor()(PIL.Image.fromarray(image))
@@ -71,28 +81,33 @@ class SignRecognition:
         input_img = Variable(img.type(torch.FloatTensor))
         # detect things
         with torch.no_grad():
-            detections = self.network(input_img)
+            detections = self.network(input_img.unsqueeze(0))
             detections = non_max_suppression(detections, self.opt.conf_thres, self.opt.nms_thres)
-
-        labels = detections[:, -1]
-
+        
+        if detections is not None:
+            labels = [:, -1]
+        else:
+            labels = []
+        
         speed_limit = False
         speed_limit_value = 0
         stop_sign = False
         stop_sign_distance = 0
 
-        for label in labels:
-            if label[:10] == "speedLimit":
-                speed_limit = True
-                # If unreadable
-                if label[-1] == "l":
-                    # Stick with previous speed limit
-                    speed_limit = False
-                else:
-                    speed_limit_value = int(label[-2:])
+        for i, label in enumerate(labels):
+            # avoid subscript errors
+            if len(label) > 10:
+                if label[:10] == "speedLimit":
+                    speed_limit = True
+                    # If unreadable
+                    if label[-1] == "l":
+                        # Stick with previous speed limit
+                        speed_limit = False
+                    else:
+                        speed_limit_value = int(label[-2:])
             if label == "stop":
                 stop_sign = True
-                stop_sign_distance = self.calc_dist(detections)
+                stop_sign_distance = self.calc_dist(detections[i], self.depth_image)
 
         return stop_sign, stop_sign_distance, speed_limit, speed_limit_value
 
@@ -109,9 +124,19 @@ class SignRecognition:
         model.eval()  # Set in evaluation mode
         return model
 
-    @staticmethod
-    def calc_dist(detections):
-        return 0
+    def calc_dist(self, detection, depth_image):
+        # find x and y coordinates of center of bounding box of detection
+        x = int(detection[2] + detection[0] / 2)
+        y = int(detection[3] + detection[1] / 2)
+        # read into PIL from OpenCV 2
+        img = transforms.ToTensor()(PIL.Image.fromarray(depth_image))
+        # Pad to square resolution
+        img, _ = pad_to_square(img, 0)
+        # Resize
+        img = resize(img, self.opt.img_size)
+        # take value from center for now
+        dist = img[0,y,x].item()
+        return dist
 
 
 if __name__ == "__main__":
