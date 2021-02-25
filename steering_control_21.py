@@ -1,5 +1,5 @@
 import rospy
-from std_msg import Float64
+from std_msgs.msg import Float64
 
 
 class SteeringController:
