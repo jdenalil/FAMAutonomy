@@ -436,7 +436,7 @@ class Line():
 
 class image_converter:
     def __init__(self):
-        self.offet_pub = rospy.Publisher("lane_offset",Float64,queue_size=20)
+        self.offset_pub = rospy.Publisher("lane_offset",Float64,queue_size=20)
         self.l_rad_pub = rospy.Publisher("l_rad",Float64,queue_size=20)
         self.r_rad_pub = rospy.Publisher("r_rad",Float64,queue_size=20)
 
@@ -484,10 +484,12 @@ class image_converter:
             self.offset_pub.publish(d_center)
             self.l_rad_pub.publish(rad_l)
             self.r_rad_pub.publish(rad_r)
+        else:
+            print("no lanes detected")
 
         # img_out = draw_lane(new_img, img_bin, l_line.best_fit, r_line.best_fit, Minv)
 
-def main(args):
+def main():
   ic = image_converter()
   rospy.init_node('lane_detection_node', anonymous=True)
   try:
@@ -496,8 +498,7 @@ def main(args):
     print("Shutting down")
   cv2.destroyAllWindows()
 
-if __name__ == '__main__':
-    main(sys.argv)
+main()
 
 
 #if __name__ == '__main__':
