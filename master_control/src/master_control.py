@@ -1,5 +1,5 @@
 import rospy
-from std_msgs import Bool
+from std_msgs.msg import Bool
 
 
 class Controller:
@@ -11,10 +11,10 @@ class Controller:
         mode = input()
         # change to shadow mode
         if mode == "0" or mode == "False":
-            self.pub(False)
+            self.pub.publish(False)
         # change to drive mode
         elif mode == "1" or mode == "True":
-            self.pub(True)
+            self.pub.publish(True)
         # quit the node
         elif mode == "Quit" or mode == "quit":
             return False
