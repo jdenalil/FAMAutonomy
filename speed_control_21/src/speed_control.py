@@ -1,7 +1,6 @@
 import rospy
 from std_msgs.msg import Float64
 from sign_recognition_21.msg import Sign
-from radar_omnipresense.msg import radar_data
 
 class SpeedController:
     def __init__(self, sys_max_speed=10, safety_c1=3, safety_c2=0.1, safety_c3=0.01):
@@ -20,7 +19,8 @@ class SpeedController:
 
         rospy.init_node('calc_target_speed', anonymous=True)
 
-        rospy.Subscriber("radar_report", radar_data, self.set_object_data)
+        rospy.Subscriber("object_speed", Float64, self.set_object_speed_data)
+        rospy.Subscriber("object_distance", Float64, self.set_object_dist_data)
         rospy.Subscriber("speed", Float64, self.set_speed_data)
         rospy.Subscriber("sign", Sign, self.set_sign_data)
 
@@ -65,10 +65,11 @@ class SpeedController:
 
         return target_speed
 
-    def set_object_data(self, message):
-        print("setting object data", message.range)
-        self.object_dist = message.range
-        self.object_vel = message.speed
+    def set_object_dist_data(self, message):
+        self.object_dist = message
+
+    def set_object_speed_data(self, message):
+        self.object_vel = message
 
     def set_speed_data(self, message):
         self.own_vel = message
