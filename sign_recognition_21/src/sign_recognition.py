@@ -50,7 +50,7 @@ class SignRecognition:
             self.image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
         except CvBridgeError as e:
             print(e)
-    
+
     def set_depth_img(self, msg):
         # read into OpenCV 2
         try:
@@ -83,12 +83,14 @@ class SignRecognition:
         with torch.no_grad():
             detections = self.network(input_img.unsqueeze(0))
             detections = non_max_suppression(detections, self.opt.conf_thres, self.opt.nms_thres)
-        
+
+        labels = []
         if detections is not None:
-            labels = [:, -1]
-        else:
-            labels = []
-        
+            for detection in detections:
+                num = detection.squeeze()[-1].item()
+                labels.append(self.classes[int(num)])
+        print(labels)
+
         speed_limit = False
         speed_limit_value = 0
         stop_sign = False
@@ -107,7 +109,7 @@ class SignRecognition:
                         speed_limit_value = int(label[-2:])
             if label == "stop":
                 stop_sign = True
-                stop_sign_distance = self.calc_dist(detections[i], self.depth_image)
+                stop_sign_distance = self.calc_dist(detections[i].squeeze(), self.depth_image)
 
         return stop_sign, stop_sign_distance, speed_limit, speed_limit_value
 
