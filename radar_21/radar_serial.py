@@ -13,6 +13,9 @@ import select
 import tty
 import termios
 
+THRESH = 4000
+curr_det_mag = 0
+
 def main(speed_pub, dist_pub):
     usage = "usage: %prog [options] arg"
     parser = OptionParser(usage)
@@ -65,20 +68,42 @@ def main(speed_pub, dist_pub):
             data_rx_length = len(data_rx_bytes)
             if data_rx_length != 0:
                 data_rx_str = str.rstrip(str(data_rx_bytes.decode('utf-8', 'strict')))
-                print(data_rx_str)
                 data = data_rx_str.split(',')
-                if len(data) == 2:
-                    units, value = data
-                    value = float(value)
-                    units = units.strip("\"")
-                    if units == "m":
-                        dist_pub.publish(value)
-                    elif units == "mps":
-                        speed_pub.publish(value)
+                units = data[0]
+                vals = data[1:]
+                units = units.strip("\"")
+                try:
+                    if units == "mps":
+                        # if the most recent distance detection was reputable
+                        if curr_det_mag > THRESH:
+                            # when false readings happen, they are always over 10 mps
+                            # real readings over 10 mps are rare
+                            if abs(float(vals[0])) < 10:
+                                print("speed reading: ", vals[0])
+                                speed_pub.publish(float(vals[0]))
+                            else:
+                                print("invalidated speed (too high value): ", vals[0])
+                        else:
+                            print("invalidated speed (magnitude): ", vals[0])
+                    elif units == "m":
+                        for i, val in enumerate(vals):
+                            vals[i] = float(val)
+                        curr_det_mag = vals[0]
+                        # if detected distance is under 1 meter (not an actual object)
+                        if vals[1] < 1:
+                            # then look at second magnitude for real object
+                            if vals[2] > THRESH:
+                                print("second object: ", vals[3])
+                                dist_pub.publish(vals[3])
+                        elif vals[0] > THRESH:
+                            print("first object: ", vals[1])
+                            dist_pub.publish(vals[1])
+                        else:
+                            print("no valid object detected")
                     else:
                         print("invalid unit:", units)
-                else:
-                    print('something went wrong...', data)
+                except Exception as e:
+                    print('something went wrong...', data, e)
 
     except SerialException:
         print("Serial Port closed. terminate.")
