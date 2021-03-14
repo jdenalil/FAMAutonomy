@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import glob
 import numpy as np
 from PIL import Image

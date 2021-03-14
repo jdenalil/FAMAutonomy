@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 #### This code is an implementation of Udacity's Self-Driving Car ND project by Awad Abdelhalim
 #### Based on Jeremy Shannon's solution https://github.com/jeremy-shannon/CarND-Advanced-Lane-Lines
 
@@ -328,6 +329,7 @@ def draw_lane(original_img, binary_img, l_fit, r_fit, Minv):
         SOE[0]=pow((x_ref-x),2)+pow((y_ref-y),2)-pow(ld,2)
         SOE[1]=centerLaneCoef[0]*pow(x,2)+centerLaneCoef[1]*x+centerLaneCoef[2]-(h-y)
         return SOE
+
     intGoalPoint=empty(2)
     goalPoint_guess=[x_ref,ld]
     goalPoint=fsolve(myFunction,goalPoint_guess)

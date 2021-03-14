@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import rospy
 import math
 from std_msgs.msg import Float64
@@ -15,12 +16,12 @@ class SteeringController:
 
         rospy.init_node('calc_steering_angle', anonymous=True)
 
-        rospy.Subscriber("/speed", Float64, self.set_current_speed)
-        rospy.Subscriber("/l_rad", Float64, self.set_left_rad)
-        rospy.Subscriber("/r_rad", Float64, self.set_right_rad)
-        rospy.Subscriber("/lane_offset", Float64, self.set_lane_offset)
+        rospy.Subscriber("speed", Float64, self.set_current_speed)
+        rospy.Subscriber("l_rad", Float64, self.set_left_rad)
+        rospy.Subscriber("r_rad", Float64, self.set_right_rad)
+        rospy.Subscriber("lane_offset", Float64, self.set_lane_offset)
 
-        self.pub = rospy.Publisher('/target_steering_angle', Float64, queue_size=1)
+        self.pub = rospy.Publisher('target_steering_angle', Float64, queue_size=1)
 
     def __call__(self, rate=10):
         r = rospy.Rate(rate)
@@ -37,10 +38,11 @@ class SteeringController:
 
     def calc_angle(self, right_rad, left_rad, lane_offset, current_speed):
         # If we don't have all data yet, don't steer
-        if None in [right_rad, left_rad, lane_offset, current_speed]:
+        if None in [lane_offset, current_speed]:
             return 0
 
-        # Extremly simple V0.1
+
+        # Extremly simple V0 version
         ld = self.lookahead_gain * self.current_speed
         alpha = math.asin(lane_offset/ld)
         target_angle = alpha
@@ -86,5 +88,5 @@ class SteeringController:
 
 
 if __name__ == "__main__":
-    steering_controller = SteeringController(None)
+    steering_controller = SteeringController()
     steering_controller()

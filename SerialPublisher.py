@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 """
-PID controllers and Send Serial Messages
+PID controllers and Sending Serial Messages
 """
 import serial
 import io
@@ -10,12 +11,14 @@ class SerialPublisher:
         self.target_speed = None
         self.current_speed = None
         self.target_steering_angle = None
+        self.drive_mode = False
 
         self.s = serial.Serial(port=p, baudrate=b, timeout=3)
 
         rospy.Subscriber("/target_speed", Float64, self.set_target_speed)
         rospy.Subscriber("/speed", Float64, self.set_current_speed)
         rospy.Subscriber("/target_steering_angle", Float64, self.set_target_steering_angle)
+        rospy.Subscriber("/drive_mode", Bool, self.set_drive_mode)
 
     def __call__(self, rate):
         r = rospy.Rate(rate)
@@ -23,13 +26,19 @@ class SerialPublisher:
         while not rospy.is_shutdown():
             steer, brake, throttle = self.calc_commands()
             command = f"{steer},{brake},{throttle}".encode()
-            serial.write(command)
+            if self.drive_mode:
+                serial.write(command)
+            else:
+                print(steer, brake, throttle)
             r.sleep()
 
     def calc_commands(self):
         steer = self.target_steering_angle
         # calc everything here --------------------------------------------------------
         return steer, brake, throttle
+
+    def set_drive_mode(self, msg):
+        self.drive_mode = msg
 
     def set_target_speed(self, msg):
         self.target_speed = msg

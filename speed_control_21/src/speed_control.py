@@ -1,12 +1,15 @@
+#!/usr/bin/env python3
 import rospy
+import time
 from std_msgs.msg import Float64
 from sign_recognition_21.msg import Sign
 
 class SpeedController:
-    def __init__(self, sys_max_speed=10, safety_c1=3, safety_c2=0.1, safety_c3=0.01):
+    def __init__(self, sys_timeout=2, sys_max_speed=10, safety_c1=3, safety_c2=0.1, safety_c3=0.01):
         self.safety_c1 = safety_c1
         self.safety_c2 = safety_c2
         self.safety_c3 = safety_c3
+        self.sys_timeout = sys_timeout
         self.sys_max_speed = sys_max_speed
 
         self.object_vel = None
@@ -16,6 +19,11 @@ class SpeedController:
         self.stop_distance = None
         self.speed_limit = None
         self.speed_limit_value = None
+        self.lane_offset_time = time.time()
+        self.object_dist_time = time.time()
+        self.object_vel_time = time.time()
+        self.own_vel = time.time()
+        self.sign_data_time = time.time()
 
         rospy.init_node('calc_target_speed', anonymous=True)
 
@@ -23,6 +31,7 @@ class SpeedController:
         rospy.Subscriber("object_distance", Float64, self.set_object_dist_data)
         rospy.Subscriber("speed", Float64, self.set_speed_data)
         rospy.Subscriber("sign", Sign, self.set_sign_data)
+        rospy.Subscriber("lane_offset", Float64, self.set_lane_offset_time)
 
         self.pub = rospy.Publisher('target_speed', Float64, queue_size=1)
 
@@ -30,19 +39,37 @@ class SpeedController:
         r = rospy.Rate(rate)
 
         while not rospy.is_shutdown():
+            # set values so they dont change during calculation
             target_speed = self.calc_speed(
                 self.own_vel,
                 self.object_vel,
-                self.object_dist
+                self.object_dist,
+                self.own_vel_time,
+                self.object_vel_time,
+                self.object_dist_time,
+                self.lane_offset_time
             )
             self.pub.publish(target_speed)
             r.sleep()
 
-    def calc_speed(self, own_vel, object_vel, object_dist):
+    def calc_speed(self, own_vel, object_vel, object_dist, own_vel_time, object_vel_time, object_dist_time, lane_offset_time):
 
         # If we don't have all data yet, don't move
         if None in [own_vel, object_vel, object_dist]:
             return 0
+
+        curr_time = time.time()
+        if curr_time - own_vel_time > self.sys_timeout:
+            return 0
+        if curr_time - object_dist_time > self.sys_timeout:
+            return 0
+        if curr_time - lane_offset_time > self.sys_timeout:
+            return 0
+
+        # as speed reading get more stale, phase them out
+        staleness = curr_time - object_vel_time
+        if staleness > 0.5:
+            object_vel = 0.5 ** staleness
 
         safety_dist = self.safety_c1 + (self.safety_c2 * own_vel) + (self.safety_c3 * own_vel ** 2)
 
@@ -65,21 +92,27 @@ class SpeedController:
 
         return target_speed
 
+    def set_lane_offset_time(self, message):
+        self.lane_offset_time = time.time()
+
     def set_object_dist_data(self, message):
         self.object_dist = message
+        self.object_dist_time = time.time()
 
     def set_object_speed_data(self, message):
         self.object_vel = message
+        self.object_vel_time = time.time()
 
     def set_speed_data(self, message):
         self.own_vel = message
+        self.own_vel_time = time.time()
 
     def set_sign_data(self, message):
-        print("setting sign data")
         self.stop = message.stop
         self.stop_distance = message.stop_distance
         self.speed_limit = message.speed_limit
         self.speed_limit_value = message.speed_limit_value
+        self.sign_data_time = time.time()
 
 
 if __name__ == "__main__":
