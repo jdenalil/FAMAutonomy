@@ -3,7 +3,10 @@
 PID controllers and Sending Serial Messages
 """
 import serial
+import rospy
 import io
+from std_msgs.msg import Float64, Bool
+
 
 
 class SerialPublisher:
@@ -13,10 +16,10 @@ class SerialPublisher:
         self.target_steering_angle = None
         self.drive_mode = False
 
-        self.s = serial.Serial(port=p, baudrate=b, timeout=3)
-
+        s = serial.Serial(port=p, baudrate=b, timeout=0.25)
+        rospy.init_node('serial_publisher', anonymous=True)
+        self.speed_pub = rospy.Publisher('/speed', Float64, queue_size=1)
         rospy.Subscriber("/target_speed", Float64, self.set_target_speed)
-        rospy.Subscriber("/speed", Float64, self.set_current_speed)
         rospy.Subscriber("/target_steering_angle", Float64, self.set_target_steering_angle)
         rospy.Subscriber("/drive_mode", Bool, self.set_drive_mode)
 
@@ -30,28 +33,36 @@ class SerialPublisher:
                 serial.write(command)
             else:
                 print(steer, brake, throttle)
+            current_speed = serial.readline()
+            if current_speed != '':
+                self.current_speed = current_speed
+                self.speed_pub.publish(current_speed)
             r.sleep()
 
     def calc_commands(self):
+        if None in [self.target_speed, self.current_speed, self.target_steering_angle]:
+            return 0,0,0
         steer = self.target_steering_angle
-        # calc everything here --------------------------------------------------------
+        if self.target_speed < self.current_speed:
+            brake = 1
+            throttle = 0
+        else:
+            throttle = int(self.target_speed)
+            brake = 0
         return steer, brake, throttle
 
     def set_drive_mode(self, msg):
-        self.drive_mode = msg
+        self.drive_mode = msg.data
 
     def set_target_speed(self, msg):
-        self.target_speed = msg
-
-    def set_current_speed(self, msg):
-        self.current_speed = msg
+        self.target_speed = msg.data
 
     def set_target_steering_angle(self, msg):
-        self.target_steering_angle = msg
+        self.target_steering_angle = msg.data
 
 
 if __name__ == "__main__":
     port = 10
     baud = 9600
     s = SerialPublisher(port, baud)
-    s(10)
+    s(4)

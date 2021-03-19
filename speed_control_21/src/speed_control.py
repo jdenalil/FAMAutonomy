@@ -99,7 +99,7 @@ class SpeedController:
             if target_speed > self.speed_limit_value:
                 print("speed limited by speed limit")
                 target_speed = self.speed_limit_value
-        if target_speed > 0:
+        if target_speed < 0:
             target_speed = 0
             print("target speed below 0")
 
@@ -122,9 +122,9 @@ class SpeedController:
 
     def set_sign_data(self, message):
         self.stop = message.stop
-        self.stop_distance = message.stop_distance.data
+        self.stop_distance = message.stop_distance
         self.speed_limit = message.speed_limit
-        self.speed_limit_value = message.speed_limit_value.data
+        self.speed_limit_value = message.speed_limit_value
         self.sign_data_time = time.time()
 
 
