@@ -13,11 +13,15 @@ from std_msgs.msg import Float64
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 import sys
+import time
 
 from numpy import *
 import math
+import statistics
 import pickle
 from scipy.optimize import *
+
+import matplotlib.pyplot as plt
 #boost yellows and
 def boost(img):
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
@@ -50,13 +54,17 @@ src = np.float32([(475,290),
                   (60,710),
                   (1280,710)])
 
-dst = np.float32([(450,0),
-                  (w-450,0),
-                  (450,h),
-                  (w-450,h)])
+dst = np.float32([(400,0),
+                  (w-400,0),
+                  (400,h),
+                  (w-400,h)])
 
+car_src = np.float32([(530, 440),
+                  (750,440),
+                  (170,580),
+                  (1110,580)])
 
-
+src = car_src
 
 def unwarp(img, src, dst):
     h,w = img.shape[:2]
@@ -68,7 +76,7 @@ def unwarp(img, src, dst):
     return warped, M, Minv
 
 
-def sobel(img, thresh=(50, 255)):
+def sobel(img, thresh=(10, 100)):
     #30 for normal vids, 85 is good for courses
     #sobel = cv2.cvtColor(img, cv2.COLOR_LAB2RGB)
     sobel= cv2.GaussianBlur(img,(23,23),0)
@@ -78,6 +86,7 @@ def sobel(img, thresh=(50, 255)):
     # 2) Apply a threshold to the Sobel
     binary_output = np.zeros_like(sobel)
     binary_output[(sobel > thresh[0]) & (sobel <= thresh[1])] = 1
+
     # 3) Return a binary image of threshold result
     return binary_output
 
@@ -85,7 +94,7 @@ def sobel(img, thresh=(50, 255)):
 # Define a function that thresholds the L-channel of HLS
 # Use exclusive lower bound (>) and inclusive upper (<=) 185 for night
 # Use 100 day, 190 night, 220 courses
-def lab_lthresh(img, thresh=(160, 255)):
+def lab_lthresh(img, thresh=(150, 255)):
     # 1) Convert to LAB color space
     #lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
     lab_l = img[:,:,0]
@@ -101,7 +110,7 @@ def lab_lthresh(img, thresh=(160, 255)):
 # Use exclusive lower bound (>) and inclusive upper (<=), OR the results of the thresholds (B channel should capture
 # yellows)
 # Use 175
-def lab_bthresh(img, thresh=(205,255)):
+def lab_bthresh(img, thresh=(150,255)):
     # 1) Convert to LAB color space
     #lab = cv2.cvtColor(img, cv2.COLOR_RGB2Lab)
     lab_b = img[:,:,2]
@@ -114,18 +123,8 @@ def lab_bthresh(img, thresh=(205,255)):
     # 3) Return a binary image of threshold result
     return binary_output
 
-
 # Define the complete image processing pipeline, reads raw image and returns binary image with lane lines identified
 def pipeline(img):
-    # Undistort
-    #img_undistort = undistort(img)
-    # Perspective Transform
-    #img_unwarp, M, Minv = unwarp(img_undistort, src, dst)
-
-    #img_sobel = sobel(img_undistort)
-
-    #img_LThresh = lab_lthresh(img_undistort)
-    #img_BThresh = lab_bthresh(img_undistort)
 
     img_sobel = sobel(img)
 
@@ -136,9 +135,20 @@ def pipeline(img):
     combined = np.zeros_like(img_LThresh)
     combined[(img_LThresh == 1) | (img_BThresh == 1)] = 1
     combined[(img_sobel != 1)] = 0
+    # debugging
+    '''
+    cv2.imwrite('yellow_img_og.png', np.float32(img_BThresh) * 255)
 
+    cv2.imwrite('white_img.png', np.float32(img_LThresh) * 255)
+
+    cv2.imwrite('sobel.png', np.float32(img_sobel) * 255)
+
+    cv2.imwrite('combined.png', np.float32(img_sobel) * 255)
+    '''
     combined, M, Minv = unwarp(combined, src, dst)
-
+    '''
+    cv2.imwrite('warp_bin_img.png', np.float32(combined) * 255)
+    '''
     return combined, Minv
 
 
@@ -150,12 +160,11 @@ def sliding_window_polyfit(img):
     # These will be the starting point for the left and right lines
     midpoint = np.int(histogram.shape[0]//2)
     quarter_point = np.int(midpoint//2)
+
     # Previously the left/right base was the max of the left/right half of the histogram
     # this changes it so that only a quarter of the histogram (directly to the left/right) is considered
     leftx_base = np.argmax(histogram[quarter_point:midpoint]) + quarter_point
     rightx_base = np.argmax(histogram[midpoint:(midpoint+quarter_point)]) + midpoint
-
-    #print('base pts:', leftx_base, rightx_base)
 
     # Choose the number of sliding windows
     nwindows = 10
@@ -292,7 +301,7 @@ def calc_curv_rad_and_center_dist(bin_img, l_fit, r_fit, l_lane_inds, r_lane_ind
     return left_curverad, right_curverad, center_dist
 
 
-def draw_lane(original_img, binary_img, l_fit, r_fit, Minv):
+def draw_lane(original_img, binary_img, l_fit, r_fit, Minv, CURR_SPEED):
     new_img = np.copy(original_img)
     if l_fit is None or r_fit is None:
         return original_img
@@ -305,6 +314,8 @@ def draw_lane(original_img, binary_img, l_fit, r_fit, Minv):
     left_fitx = l_fit[0]*ploty**2 + l_fit[1]*ploty + l_fit[2]
     right_fitx = r_fit[0]*ploty**2 + r_fit[1]*ploty + r_fit[2]
 
+
+    # Jason Note: I would not trust this
     ym_per_pix = 3.048/100 # meters per pixel in y dimension, lane line is 10 ft = 3.048 meters
     xm_per_pix = 3.7/378 # meters per pixel in x dimension, lane width is 12 ft = 3.7 meters
 
@@ -313,41 +324,50 @@ def draw_lane(original_img, binary_img, l_fit, r_fit, Minv):
     y_ref=h+wheelbase
     x_ref_int=int(x_ref)
     y_ref_int=int(y_ref)
-    ld_meters=10
+    ld_meters= 10
     ld=720-(ld_meters*(100/3.048))
     ld_int=int(ld)
     centerLaneCoef=((l_fit+r_fit)/2)
 
+    # This made absolutely no sense to me, even after reading tons of pure pursuit
+    # implementations and. I will write my own. - Jason
+    # They were trying to get SOE[0] and SOE[1] as close to zero as possible but
+    # I can't tell how they were derived
 
     #Solving for goal point using look-ahead circle and centerline equations
-    def myFunction(goalPoint):
+    def solveFunction(goalPoint):
 
         x=goalPoint[0]
         y=goalPoint[1]
 
         SOE=empty(2)
         SOE[0]=pow((x_ref-x),2)+pow((y_ref-y),2)-pow(ld,2)
-        SOE[1]=centerLaneCoef[0]*pow(x,2)+centerLaneCoef[1]*x+centerLaneCoef[2]-(h-y)
+        SOE[1]=(centerLaneCoef[0]*pow(x,2))+centerLaneCoef[1]*x+centerLaneCoef[2]-(h-y)
         return SOE
 
     intGoalPoint=empty(2)
     goalPoint_guess=[x_ref,ld]
-    goalPoint=fsolve(myFunction,goalPoint_guess)
+    goalPoint=fsolve(solveFunction,goalPoint_guess)
 
-    #Converting some parameters for plotting and using in pure pursuint
+    #Converting some parameters for plotting and using in pure pursuit
     intGoalPoint_x=int(goalPoint[0])
     intGoalPoint_y=int(goalPoint[1])
-    x_Goal_meters=intGoalPoint_x*xm_per_pix
-    y_Goal_meters=intGoalPoint_y*ym_per_pix
-    crossTrackError=(goalPoint[0]-x_ref)*xm_per_pix
+
+    print(centerLaneCoef)
+    x_goal_point = centerLaneCoef[0] * (450 ** 2)+ centerLaneCoef[1] * 450 + centerLaneCoef[2]
+    print(x_goal_point)
+    crossTrackError = (x_goal_point - x_ref) * xm_per_pix
 
     #Pure Pursuit
+    '''
     numer=2*wheelbase*crossTrackError
     denom=ld_meters**2
     delta_degrees=math.degrees(math.atan(numer/denom))
+    '''
+    delta_degrees= math.degrees(math.atan(crossTrackError/ld_meters))
     print("Reference Point: ", x_ref, y_ref)
-    print("Goal Point: ",goalPoint)
-    print("Look Ahead Distance (meters): ",ld_meters)
+    print("Goal Point: ", goalPoint)
+    print("Look Ahead Distance (meters): ", ld_meters)
     print("Cross Track Error (meters): ", crossTrackError )
     print("Wheel angle change: ", delta_degrees)
     #Evans Changes End
@@ -368,7 +388,7 @@ def draw_lane(original_img, binary_img, l_fit, r_fit, Minv):
     newwarp = cv2.warpPerspective(color_warp, Minv, (w, h))
     # Combine the result with the original image
     result = cv2.addWeighted(new_img, 1, newwarp, 0.5, 0)
-    return result
+    return result, delta_degrees
 
 
 def draw_data(original_img, curv_rad, center_dist):
@@ -438,12 +458,15 @@ class Line():
 
 class image_converter:
     def __init__(self):
-        self.offset_pub = rospy.Publisher("lane_offset",Float64,queue_size=20)
-        self.l_rad_pub = rospy.Publisher("l_rad",Float64,queue_size=20)
-        self.r_rad_pub = rospy.Publisher("r_rad",Float64,queue_size=20)
+        self.pub = rospy.Publisher('target_steering_angle', Float64, queue_size=1)
 
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber("/zed/zed_node/left_raw/image_raw_color", Image, self.detect)
+        self.speed_sub = rospy.Subscriber("speed", Float64, self.set_current_speed)
+        self.current_speed = 15
+
+    def set_current_speed(self, msg):
+        self.current_speed = msg
 
     def detect(self,data):
         try:
@@ -458,21 +481,28 @@ class image_converter:
         l_line = Line()
         r_line = Line()
 
-
         # if both left and right lines were detected last frame, use polyfit_using_prev_fit, otherwise use sliding window
-        if not l_line.detected or not r_line.detected:
-            l_fit, r_fit, l_lane_inds, r_lane_inds, _ = sliding_window_polyfit(img_bin)
-        else:
-            l_fit, r_fit, l_lane_inds, r_lane_inds = polyfit_using_prev_fit(img_bin, l_line.best_fit, r_line.best_fit)
+        l_fit, r_fit, l_lane_inds, r_lane_inds, _ = sliding_window_polyfit(img_bin)
 
-        # invalidate both fits if the difference in their x-intercepts isn't around 250 px (+/- 100 px)
+        #l_fit, r_fit, l_lane_inds, r_lane_inds = polyfit_using_prev_fit(img_bin, l_assumption, r_assumption)
+
+        # invalidate both fits if the difference in their x-intercepts isn't around 300 px (+/- 200 px)
         if l_fit is not None and r_fit is not None:
             # calculate x-intercept (bottom of image, x=image_height) for fits
             h = img.shape[0]
             l_fit_x_int = l_fit[0]*h**2 + l_fit[1]*h + l_fit[2]
             r_fit_x_int = r_fit[0]*h**2 + r_fit[1]*h + r_fit[2]
             x_int_diff = abs(r_fit_x_int-l_fit_x_int)
-            if abs(300 - x_int_diff) > 100:
+            if abs(300 - x_int_diff) > 200:
+                print("invalidated based on lane size")
+                l_fit = None
+                r_fit = None
+            if l_fit_x_int > 700:
+                print("invalidated based on left x int")
+                l_fit = None
+                r_fit = None
+            if r_fit_x_int < 575:
+                print("invalidated based on right x int")
                 l_fit = None
                 r_fit = None
 
@@ -483,13 +513,13 @@ class image_converter:
         if l_line.best_fit is not None and r_line.best_fit is not None:
             rad_l, rad_r, d_center = calc_curv_rad_and_center_dist(img_bin, l_line.best_fit, r_line.best_fit,
                                                                    l_lane_inds, r_lane_inds)
-            self.offset_pub.publish(d_center)
-            self.l_rad_pub.publish(rad_l)
-            self.r_rad_pub.publish(rad_r)
+            print("lane detected!")
+            img_out, steer_angle = draw_lane(new_img, img_bin, l_line.best_fit, r_line.best_fit, Minv, self.current_speed)
+            self.pub.publish(steer_angle)
+            cv2.imwrite('output_image1.png', img_out)
         else:
             print("no lanes detected")
 
-        # img_out = draw_lane(new_img, img_bin, l_line.best_fit, r_line.best_fit, Minv)
 
 def main():
   ic = image_converter()
@@ -501,19 +531,6 @@ def main():
   cv2.destroyAllWindows()
 
 main()
-
-
-#if __name__ == '__main__':
-#    try:
-#        images= (glob.glob('*.png'))
-#    	for image in images:
-#    		l_line = Line()
-#    		r_line = Line()
-#    		img= cv2.imread(image)
-#    		cv2.imwrite('output_%s' % image, process_image(img))
-#    except rospy.ROSInterruptException:
-#        pass
-
 
 ####################################################################################################################################
 """

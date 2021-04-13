@@ -1,6 +1,5 @@
 <launch>
-    <node name="speed_control" pkg="speed_control_21" type="speed_control.py" output="screen" />
-    <node name="steering_control" pkg="steering_control_21" type="steering_control.py" output="screen" />
+    <node name="speed_control" pkg="speed_control_21" type="speed_control.py" output="screen" />\
     <node name="lane_detection" pkg="lane_centering_kings" type="lane_lines_ros.py" output="screen" />
     <node name="sign_detection" pkg="sign_recognition_21" type="sign_recognition.py" output="screen" />
 </launch>
