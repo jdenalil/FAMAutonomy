@@ -14,8 +14,9 @@ import select
 import tty
 import termios
 
-THRESH = 4000
+THRESH = 250
 curr_det_mag = 0
+
 
 def main(speed_pub, dist_pub):
     usage = "usage: %prog [options] arg"
@@ -35,7 +36,6 @@ def main(speed_pub, dist_pub):
                       default="",
                       dest="interval_send")
     (options, args) = parser.parse_args()
-
 
     baudrate_int = int(options.baudrate)
     if baudrate_int <= 0:
@@ -59,7 +59,6 @@ def main(speed_pub, dist_pub):
     new_port_attr[3] = new_port_attr[3] & ~termios.ECHO
     termios.tcdrain(serial_port.fileno())
     termios.tcsetattr(serial_port.fileno(), termios.TCSADRAIN, new_port_attr)
-
     try:
         tty.setcbreak(sys.stdin.fileno())
         serial_port.flushInput()
@@ -73,6 +72,7 @@ def main(speed_pub, dist_pub):
                 units = data[0]
                 vals = data[1:]
                 units = units.strip("\"")
+                curr_det_mag = 0
                 try:
                     if units == "mps":
                         # if the most recent distance detection was reputable
@@ -94,17 +94,21 @@ def main(speed_pub, dist_pub):
                         if vals[1] < 1:
                             # then look at second magnitude for real object
                             if vals[2] > THRESH:
-                                print("second object: ", vals[3])
+                                print("second object: ", vals[3], "magnitude: ", vals[2])
                                 dist_pub.publish(vals[3])
+                            else:
+                                reason = 1
                         elif vals[0] > THRESH:
-                            print("first object: ", vals[1])
+                            print("first object: ", vals[1], "magnitude: ", vals[0])
                             dist_pub.publish(vals[1])
                         else:
                             print("no valid object detected")
                     else:
                         print("invalid unit:", units)
+
                 except Exception as e:
                     print('something went wrong...', data, e)
+
 
     except SerialException:
         print("Serial Port closed. terminate.")

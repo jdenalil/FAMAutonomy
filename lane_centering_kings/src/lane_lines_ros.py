@@ -59,6 +59,7 @@ dst = np.float32([(400,0),
                   (400,h),
                   (w-400,h)])
 
+# source for test data I collected
 car_src = np.float32([(530, 440),
                   (750,440),
                   (170,580),
@@ -315,7 +316,7 @@ def draw_lane(original_img, binary_img, l_fit, r_fit, Minv, CURR_SPEED):
     right_fitx = r_fit[0]*ploty**2 + r_fit[1]*ploty + r_fit[2]
 
 
-    # Jason Note: I would not trust this
+    # Jason Note: I would recalculate this if possible...
     ym_per_pix = 3.048/100 # meters per pixel in y dimension, lane line is 10 ft = 3.048 meters
     xm_per_pix = 3.7/378 # meters per pixel in x dimension, lane width is 12 ft = 3.7 meters
 
@@ -329,10 +330,10 @@ def draw_lane(original_img, binary_img, l_fit, r_fit, Minv, CURR_SPEED):
     ld_int=int(ld)
     centerLaneCoef=((l_fit+r_fit)/2)
 
-    # This made absolutely no sense to me, even after reading tons of pure pursuit
-    # implementations and. I will write my own. - Jason
+    # Next few lines made absolutely no sense to me, even after reading tons of pure pursuit
+    # implementations I ended up not using this at all but left it for reference.
     # They were trying to get SOE[0] and SOE[1] as close to zero as possible but
-    # I can't tell how they were derived
+    # I can't tell how they were derived.
 
     #Solving for goal point using look-ahead circle and centerline equations
     def solveFunction(goalPoint):
@@ -353,23 +354,16 @@ def draw_lane(original_img, binary_img, l_fit, r_fit, Minv, CURR_SPEED):
     intGoalPoint_x=int(goalPoint[0])
     intGoalPoint_y=int(goalPoint[1])
 
-    print(centerLaneCoef)
+    # Jason pursuit - This is what is actually used for steering calculation
     x_goal_point = centerLaneCoef[0] * (450 ** 2)+ centerLaneCoef[1] * 450 + centerLaneCoef[2]
-    print(x_goal_point)
     crossTrackError = (x_goal_point - x_ref) * xm_per_pix
-
-    #Pure Pursuit
-    '''
-    numer=2*wheelbase*crossTrackError
-    denom=ld_meters**2
-    delta_degrees=math.degrees(math.atan(numer/denom))
-    '''
     delta_degrees= math.degrees(math.atan(crossTrackError/ld_meters))
+
     print("Reference Point: ", x_ref, y_ref)
     print("Goal Point: ", goalPoint)
     print("Look Ahead Distance (meters): ", ld_meters)
     print("Cross Track Error (meters): ", crossTrackError )
-    print("Wheel angle change: ", delta_degrees)
+    print("Wheel angle: ", delta_degrees)
     #Evans Changes End
 
     # Recast the x and y points into usable format for cv2.fillPoly()

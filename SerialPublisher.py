@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-"""
-PID controllers and Sending Serial Messages
-"""
 import serial
 import rospy
 import io
@@ -40,6 +37,7 @@ class SerialPublisher:
             r.sleep()
 
     def calc_commands(self):
+        # Unfinished - still needs to be integrated with drive-by-wire system.
         if None in [self.target_speed, self.current_speed, self.target_steering_angle]:
             return 0,0,0
         steer = self.target_steering_angle
